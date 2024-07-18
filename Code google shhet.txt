@@ -1,0 +1,48 @@
+// Original code from https://github.com/jamiewilson/form-to-google-sheets
+// Updated for 2021 and ES6 standards
+
+const sheetName = 'Sheet1';
+const scriptProp = PropertiesService.getScriptProperties();
+
+function initialSetup() {
+  const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  scriptProp.setProperty('key', activeSpreadsheet.getId());
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+
+  try {
+    const doc = SpreadsheetApp.openById(scriptProp.getProperty('key'));
+    const sheet = doc.getSheetByName(sheetName);
+
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const nextRow = sheet.getLastRow() + 1;
+
+    // Map each header to the corresponding value from e.parameter or default to empty string
+    const newRow = headers.map(function(header) {
+      return header === 'Date' ? new Date() : (e.parameter[header] || ''); // Handle cases where parameter may be undefined
+    });
+
+    // Log new row data for debugging (optional)
+    console.log('New row data:');
+    console.log(newRow);
+
+    // Set values in the next available row in the sheet
+    sheet.getRange(nextRow, 1, 1, newRow.length).setValues([newRow]);
+
+    // Return success response with inserted row number
+    return ContentService
+      .createTextOutput(JSON.stringify({ 'result': 'success', 'row': nextRow }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (e) {
+    // Return error response if any exception occurs
+    return ContentService
+      .createTextOutput(JSON.stringify({ 'result': 'error', 'error': e.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    // Release the lock to allow other executions
+    lock.releaseLock();
+  }
+}
